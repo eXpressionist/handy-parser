@@ -1,0 +1,75 @@
+name: handy-parser
+
+x-common: &common
+  build:
+    context: .
+  image: ${HANDY_PARSER_IMAGE:-handy-parser:local}
+  user: "10001:10001"
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  volumes:
+    - ./data:/data
+  tmpfs:
+    - /tmp:size=16m,mode=1777
+  cpus: "0.50"
+  pids_limit: 64
+  logging:
+    driver: json-file
+    options:
+      max-size: "5m"
+      max-file: "2"
+
+x-env: &common-env
+  HANDY_DB_PATH: /data/handy.db
+  HANDY_CHECK_TIMEOUT: 4m
+  HANDY_HTTP_TIMEOUT: 20s
+  HANDY_MAX_RESPONSE_BYTES: "2097152"
+  HANDY_TELEGRAM_TOKEN_FILE: /run/secrets/telegram_bot_token
+  HANDY_TELEGRAM_CHAT_ID: ${HANDY_TELEGRAM_CHAT_ID:-}
+  HANDY_DISPLAY_TIMEZONE: ${HANDY_DISPLAY_TIMEZONE:-Europe/Moscow}
+
+services:
+  web:
+    <<: *common
+    command: [serve]
+    restart: unless-stopped
+    mem_limit: 96m
+    memswap_limit: 96m
+    environment:
+      <<: *common-env
+      GOMEMLIMIT: 64MiB
+      HANDY_LISTEN: "0.0.0.0:8080"
+      HANDY_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+    ports:
+      - "127.0.0.1:8080:8080"
+    secrets:
+      - telegram_bot_token
+      - admin_password
+    healthcheck:
+      test: [CMD, /app/handy-parser, healthcheck]
+      interval: 60s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  check:
+    <<: *common
+    profiles: [manual]
+    command: [check]
+    restart: "no"
+    mem_limit: 192m
+    memswap_limit: 192m
+    environment:
+      <<: *common-env
+      GOMEMLIMIT: 128MiB
+    secrets:
+      - telegram_bot_token
+
+secrets:
+  telegram_bot_token:
+    file: ./secrets/telegram_bot_token
+  admin_password:
+    file: ./secrets/admin_password

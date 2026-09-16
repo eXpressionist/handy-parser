@@ -1,6 +1,6 @@
 # Установка и эксплуатация
 
-**Это инструкция для будущего первого релиза. Сейчас нет готового приложения, Dockerfile или опубликованного образа.** Файлы `deploy/*.example` — проверяемые шаблоны, а не обещание работающей установки. После реализации этапа Docker шаблоны будут проверены на Debian 13 и включены в release-архив как рабочие файлы.
+Dockerfile и Compose уже находятся в репозитории, однако установка на Debian 13 ещё не прошла приёмочные проверки и готовый образ GHCR не опубликован. До первого тега этот документ служит инструкцией для тестового окружения. Файлы `deploy/*.example` остаются шаблонами systemd и будущего release-развёртывания.
 
 ## 1. Требования
 
@@ -21,28 +21,26 @@ sudo docker info
 
 ## 2. Получить файлы версии
 
-После появления тега `v0.1.0`:
+Для тестирования текущей ветки:
 
 ```sh
 sudo install -d -m 0755 /opt/handy-parser
 sudo chown "$(id -u):$(id -g)" /opt/handy-parser
-git clone --branch v0.1.0 --depth 1 \
-  https://github.com/eXpressionist/handy-parser.git /opt/handy-parser
+git clone --depth 1 https://github.com/eXpressionist/handy-parser.git /opt/handy-parser
 cd /opt/handy-parser
-cp deploy/compose.yaml.example compose.yaml
 cp deploy/.env.example .env
 ```
 
-В релизе уточнить имена файлов, если `.example` заменены рабочими вариантами. Указанная папка должна быть пустой перед clone. Альтернатива без Git — deploy-архив из GitHub Release с проверкой опубликованной контрольной суммы.
+Указанная папка должна быть пустой перед clone. Текущий корневой `compose.yaml` собирает образ из исходников и предназначен для тестирования. После `v0.1.0` инструкция будет переключена на готовый версионированный образ и deploy-архив с контрольной суммой.
 
-На VPS устанавливается готовый образ. Компилировать Go и собирать образ на слабом сервере не требуется.
+Для рабочего VPS целевым вариантом остаётся готовый образ: компилировать Go и modernc SQLite на слабом сервере не следует. До публикации GHCR собирать alpha-образ лучше на другой машине и переносить через registry.
 
 ## 3. Telegram и секреты
 
 1. Создать бота через официальный `@BotFather`, сохранить токен только на VPS.
 2. Отправить боту `/start` со своего аккаунта.
 3. Получить chat_id своего чата через Bot API `getUpdates` локально; не отправлять токен сторонним ботам/сайтам. Для группового чата использовать его chat_id и проверить доступ бота.
-4. В `.env` заполнить `HANDY_TELEGRAM_CHAT_ID`. Значение `HANDY_PARSER_IMAGE` должно указывать на реально опубликованный тег или digest.
+4. В `.env` заполнить `HANDY_TELEGRAM_CHAT_ID`. До первого релиза `HANDY_PARSER_IMAGE` задаёт только локальный тег собранного образа; после релиза он будет указывать на опубликованный тег или digest.
 
 Подготовить каталоги:
 
@@ -93,7 +91,7 @@ PY
 
 ```sh
 sudo docker compose --env-file .env config --quiet
-sudo docker compose --env-file .env pull web check
+sudo docker compose --env-file .env build
 sudo docker compose --env-file .env run --rm -T check migrate
 sudo docker compose --env-file .env up -d web
 sudo docker compose ps

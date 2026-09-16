@@ -16,6 +16,8 @@ backups/
 bin/
 dist/
 .tools/
+.cache/
+.gomodcache/
 coverage.out
 *.exe
 .DS_Store
