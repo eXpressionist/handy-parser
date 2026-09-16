@@ -438,11 +438,34 @@ func isHTTPS(r *http.Request) bool {
 }
 func sameOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	if origin == "" {
+	if origin != "" && origin != "null" && originMatchesRequest(origin, r) {
 		return true
 	}
-	u, err := url.Parse(origin)
-	return err == nil && strings.EqualFold(u.Host, r.Host)
+	fetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+	if fetchSite == "same-origin" || fetchSite == "none" {
+		return true
+	}
+	if referer := r.Header.Get("Referer"); referer != "" && originMatchesRequest(referer, r) {
+		return true
+	}
+	return origin == "" && fetchSite == "" && r.Header.Get("Referer") == ""
+}
+
+func originMatchesRequest(rawURL string, r *http.Request) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return false
+	}
+	hosts := []string{r.Host}
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); forwarded != "" {
+		hosts = append(hosts, forwarded)
+	}
+	for _, host := range hosts {
+		if strings.EqualFold(strings.TrimSpace(host), u.Host) {
+			return true
+		}
+	}
+	return false
 }
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
