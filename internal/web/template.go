@@ -24,7 +24,8 @@ const pageTemplate = `{{define "watchForm"}}
     </select></div>
     <div><label>Порог цены (для правила «ниже»)</label><input name="threshold" value="{{threshold .Form.ThresholdMinor}}" placeholder="100.00"></div>
     <div class="full actions">
-      {{if .Edit}}<button>Обновить</button><a class="button muted" href="/">Отмена</a>{{else}}<button formaction="/preview">Предпросмотр</button><button>Сохранить</button>{{end}}
+      <button formaction="{{if .Edit}}/watches/{{.Form.ID}}/preview{{else}}/preview{{end}}">Предпросмотр</button>
+      {{if .Edit}}<button>Обновить</button><a class="button muted" href="/">Отмена</a>{{else}}<button>Сохранить</button>{{end}}
     </div>
   </div>
 </form>

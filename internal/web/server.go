@@ -90,6 +90,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /preview", s.auth(http.HandlerFunc(s.preview)))
 	mux.Handle("POST /watches", s.auth(http.HandlerFunc(s.createWatch)))
 	mux.Handle("GET /watches/{id}/edit", s.auth(http.HandlerFunc(s.editPage)))
+	mux.Handle("POST /watches/{id}/preview", s.auth(http.HandlerFunc(s.preview)))
 	mux.Handle("POST /watches/{id}", s.auth(http.HandlerFunc(s.updateWatch)))
 	mux.Handle("POST /watches/{id}/toggle", s.auth(http.HandlerFunc(s.toggleWatch)))
 	mux.Handle("POST /watches/{id}/delete", s.auth(http.HandlerFunc(s.deleteWatch)))
@@ -247,7 +248,17 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
+	var id int64
+	if rawID := r.PathValue("id"); rawID != "" {
+		var err error
+		id, err = strconv.ParseInt(rawID, 10, 64)
+		if err != nil || id <= 0 {
+			http.Error(w, "bad id", http.StatusBadRequest)
+			return
+		}
+	}
 	watch, obs, cfg, err := s.formWatch(r)
+	watch.ID = id
 	if err != nil {
 		s.previewResult(w, r, watch, model.Observation{}, "Ошибка: "+err.Error())
 		return
@@ -364,7 +375,7 @@ func setThreshold(w *model.Watch, raw string) error {
 
 func (s *Server) previewResult(w http.ResponseWriter, r *http.Request, watch model.Watch, obs model.Observation, message string) {
 	sess, _ := r.Context().Value(sessionKey).(session)
-	s.render(w, pageData{CSRF: sess.csrf, Preview: true, Form: watch, Observation: obs, Message: message})
+	s.render(w, pageData{CSRF: sess.csrf, Preview: true, Edit: watch.ID > 0, Form: watch, Observation: obs, Message: message})
 }
 
 func (s *Server) toggleWatch(w http.ResponseWriter, r *http.Request) {
