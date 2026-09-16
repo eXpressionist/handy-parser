@@ -207,7 +207,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
-		if r.Method == http.MethodPost && (!sameOrigin(r) || r.FormValue("csrf") != sess.csrf) {
+		if r.Method == http.MethodPost && (sess.csrf == "" || r.FormValue("csrf") != sess.csrf) {
 			http.Error(w, "invalid CSRF token", http.StatusForbidden)
 			return
 		}
@@ -417,7 +417,7 @@ func (s *Server) testTelegram(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) validCSRF(r *http.Request) bool {
 	sess, _ := r.Context().Value(sessionKey).(session)
-	return sameOrigin(r) && r.FormValue("csrf") == sess.csrf
+	return sess.csrf != "" && r.FormValue("csrf") == sess.csrf
 }
 func (s *Server) redirect(w http.ResponseWriter, r *http.Request, message string) {
 	http.Redirect(w, r, "/?msg="+url.QueryEscape(message), http.StatusSeeOther)
@@ -432,37 +432,6 @@ func (s *Server) render(w http.ResponseWriter, data pageData) {
 func randomToken() string { b := make([]byte, 24); _, _ = rand.Read(b); return hex.EncodeToString(b) }
 func isHTTPS(r *http.Request) bool {
 	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
-}
-func sameOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin != "" && origin != "null" && originMatchesRequest(origin, r) {
-		return true
-	}
-	fetchSite := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
-	if fetchSite == "same-origin" || fetchSite == "none" {
-		return true
-	}
-	if referer := r.Header.Get("Referer"); referer != "" && originMatchesRequest(referer, r) {
-		return true
-	}
-	return origin == "" && fetchSite == "" && r.Header.Get("Referer") == ""
-}
-
-func originMatchesRequest(rawURL string, r *http.Request) bool {
-	u, err := url.Parse(rawURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return false
-	}
-	hosts := []string{r.Host}
-	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); forwarded != "" {
-		hosts = append(hosts, forwarded)
-	}
-	for _, host := range hosts {
-		if strings.EqualFold(strings.TrimSpace(host), u.Host) {
-			return true
-		}
-	}
-	return false
 }
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
