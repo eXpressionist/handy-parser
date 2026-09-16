@@ -98,6 +98,16 @@ CREATE TABLE IF NOT EXISTS outbox (
  last_error TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox(status, next_attempt_at);
+CREATE TABLE IF NOT EXISTS runs (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ started_at TEXT NOT NULL,
+ finished_at TEXT,
+ status TEXT NOT NULL,
+ checked INTEGER NOT NULL DEFAULT 0,
+ changed INTEGER NOT NULL DEFAULT 0,
+ errors INTEGER NOT NULL DEFAULT 0,
+ message TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS run_lock (
  name TEXT PRIMARY KEY,
  owner TEXT NOT NULL,
@@ -105,6 +115,64 @@ CREATE TABLE IF NOT EXISTS run_lock (
 );`
 	_, err := s.db.ExecContext(ctx, schema)
 	return err
+}
+
+func (s *Store) StartRun(ctx context.Context) (int64, error) {
+	r, err := s.db.ExecContext(ctx, `INSERT INTO runs(started_at,status) VALUES(?,'running')`, now())
+	if err != nil {
+		return 0, err
+	}
+	return r.LastInsertId()
+}
+
+func (s *Store) FinishRun(ctx context.Context, id int64, summary model.RunSummary, runErr error) error {
+	status := "success"
+	message := ""
+	if summary.Skipped {
+		status = "skipped"
+	}
+	if runErr != nil || summary.Errors > 0 {
+		status = "error"
+	}
+	if runErr != nil {
+		message = runErr.Error()
+		if len(message) > 500 {
+			message = message[:500]
+		}
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE runs SET finished_at=?,status=?,checked=?,changed=?,errors=?,message=? WHERE id=?`, now(), status, summary.Checked, summary.Changed, summary.Errors, message, id)
+	return err
+}
+
+func (s *Store) LatestRun(ctx context.Context) (model.RunRecord, error) {
+	var r model.RunRecord
+	var started string
+	var finished sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT id,started_at,finished_at,status,checked,changed,errors,message FROM runs ORDER BY id DESC LIMIT 1`).Scan(&r.ID, &started, &finished, &r.Status, &r.Checked, &r.Changed, &r.Errors, &r.Message)
+	if err != nil {
+		return r, err
+	}
+	r.StartedAt, _ = time.Parse(time.RFC3339Nano, started)
+	r.FinishedAt = parseNullTime(finished)
+	return r, nil
+}
+
+func (s *Store) Cleanup(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `DELETE FROM changes WHERE observed_at < ?`, time.Now().UTC().AddDate(-1, 0, 0).Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM outbox WHERE status='delivered' AND delivered_at < ?`, time.Now().UTC().AddDate(0, 0, -30).Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM runs WHERE started_at < ?`, time.Now().UTC().AddDate(0, 0, -30).Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) CreateWatch(ctx context.Context, w model.Watch) (int64, error) {
@@ -198,6 +266,11 @@ func (s *Store) RecordSuccess(ctx context.Context, expected model.Watch, obs mod
 	timestamp := now()
 	if _, err = tx.ExecContext(ctx, `UPDATE watches SET last_value=?,last_display=?,currency=?,last_success_at=?,last_check_at=?,last_error='',consecutive_errors=0,error_alerted=0,updated_at=? WHERE id=?`, obs.Normalized, obs.Display, obs.Currency, timestamp, timestamp, timestamp, expected.ID); err != nil {
 		return false, false, err
+	}
+	if adapterConfig := obs.Metadata["adapter_config"]; adapterConfig != "" {
+		if _, err = tx.ExecContext(ctx, `UPDATE watches SET adapter_config=? WHERE id=?`, adapterConfig, expected.ID); err != nil {
+			return false, false, err
+		}
 	}
 	if changed {
 		r, e := tx.ExecContext(ctx, `INSERT INTO changes(watch_id,old_value,new_value,old_display,new_display,observed_at) VALUES(?,?,?,?,?,?)`, expected.ID, oldValue, obs.Normalized, oldDisplay, obs.Display, timestamp)
@@ -320,6 +393,12 @@ func (s *Store) PendingOutbox(ctx context.Context, limit int) ([]OutboxItem, err
 		items = append(items, i)
 	}
 	return items, rows.Err()
+}
+
+func (s *Store) PendingOutboxCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM outbox WHERE status='pending'`).Scan(&count)
+	return count, err
 }
 
 func (s *Store) MarkDelivered(ctx context.Context, id int64) error {

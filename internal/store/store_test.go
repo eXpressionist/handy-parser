@@ -52,6 +52,27 @@ func TestRecordSuccessBaselineAndChangeAreAtomic(t *testing.T) {
 	}
 }
 
+func TestRecordSuccessRefreshesAdapterConfig(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	id, err := s.CreateWatch(ctx, model.Watch{Name: "PSP", URL: "https://psp.ge/product", Kind: model.KindPSP, ValueType: model.ValuePrice, Currency: "GEL", AdapterConfig: `{"product_id":1}`, Rule: model.RuleAnyChange, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, _ := s.GetWatch(ctx, id)
+	_, _, err = s.RecordSuccess(ctx, w, model.Observation{Normalized: "100", Display: "1.00 GEL", Currency: "GEL", Metadata: map[string]string{"adapter_config": `{"product_id":2}`}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := s.GetWatch(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.AdapterConfig != `{"product_id":2}` {
+		t.Fatalf("adapter config=%s", updated.AdapterConfig)
+	}
+}
+
 func TestEditedWatchRejectsStaleResult(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

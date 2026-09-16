@@ -103,13 +103,22 @@ func (e *Extractor) psp(ctx context.Context, w model.Watch) (model.Observation, 
 		return model.Observation{}, fmt.Errorf("invalid PSP adapter configuration")
 	}
 	actual, obs, err := e.pspByID(ctx, cfg.ProductID)
-	if err != nil {
-		return model.Observation{}, err
+	if err == nil && (cfg.SKU == "" || actual.SKU == cfg.SKU) {
+		return obs, nil
 	}
-	if cfg.SKU != "" && actual.SKU != cfg.SKU {
-		return model.Observation{}, fmt.Errorf("PSP product SKU changed from %s to %s", cfg.SKU, actual.SKU)
+	resolved, resolvedObs, resolveErr := e.ResolvePSP(ctx, w.URL)
+	if resolveErr != nil {
+		return model.Observation{}, fmt.Errorf("stored PSP product failed (%v); URL resolution failed (%v)", err, resolveErr)
 	}
-	return obs, nil
+	if cfg.SKU != "" && resolved.SKU != cfg.SKU {
+		return model.Observation{}, fmt.Errorf("PSP product SKU changed from %s to %s", cfg.SKU, resolved.SKU)
+	}
+	encoded, _ := json.Marshal(resolved)
+	if resolvedObs.Metadata == nil {
+		resolvedObs.Metadata = map[string]string{}
+	}
+	resolvedObs.Metadata["adapter_config"] = string(encoded)
+	return resolvedObs, nil
 }
 
 func (e *Extractor) pspByID(ctx context.Context, id int64) (PSPConfig, model.Observation, error) {

@@ -30,16 +30,28 @@ func New(s *store.Store, e Observer, t *notify.Telegram, timeout time.Duration, 
 	return &Runner{store: s, extractor: e, telegram: t, timeout: timeout, logger: logger}
 }
 
-func (r *Runner) Run(parent context.Context) (model.RunSummary, error) {
+func (r *Runner) Run(parent context.Context) (summary model.RunSummary, runErr error) {
 	ctx, cancel := context.WithTimeout(parent, r.timeout)
 	defer cancel()
+	runID, err := r.store.StartRun(ctx)
+	if err != nil {
+		return summary, err
+	}
+	defer func() {
+		finishCtx, c := context.WithTimeout(context.Background(), 5*time.Second)
+		defer c()
+		if err := r.store.FinishRun(finishCtx, runID, summary, runErr); err != nil {
+			r.logger.Error("finish run record", "error", err)
+		}
+	}()
 	owner := randomOwner()
 	locked, err := r.store.AcquireRun(ctx, owner, r.timeout+time.Minute)
 	if err != nil {
-		return model.RunSummary{}, err
+		return summary, err
 	}
 	if !locked {
-		return model.RunSummary{Skipped: true}, nil
+		summary.Skipped = true
+		return summary, nil
 	}
 	defer func() {
 		releaseCtx, c := context.WithTimeout(context.Background(), 5*time.Second)
@@ -48,9 +60,8 @@ func (r *Runner) Run(parent context.Context) (model.RunSummary, error) {
 	}()
 	watches, err := r.store.ListEnabled(ctx)
 	if err != nil {
-		return model.RunSummary{}, err
+		return summary, err
 	}
-	summary := model.RunSummary{}
 	for index, w := range watches {
 		if index > 0 {
 			select {
@@ -100,6 +111,9 @@ func (r *Runner) Run(parent context.Context) (model.RunSummary, error) {
 	if err := r.deliver(ctx); err != nil {
 		summary.Errors++
 		r.logger.Warn("Telegram outbox not fully delivered", "error", err)
+	}
+	if err := r.store.Cleanup(ctx); err != nil {
+		r.logger.Warn("cleanup old records", "error", err)
 	}
 	return summary, nil
 }

@@ -44,6 +44,10 @@ func TestRunCreatesBaselineThenChangeEvent(t *testing.T) {
 	if first.Checked != 1 || first.Changed != 0 || first.Errors != 0 {
 		t.Fatalf("unexpected baseline summary: %+v", first)
 	}
+	firstRun, err := s.LatestRun(ctx)
+	if err != nil || firstRun.Status != "success" {
+		t.Fatalf("first run record: %+v err=%v", firstRun, err)
+	}
 	w, err := s.GetWatch(ctx, id)
 	if err != nil || w.LastValue != "1000" {
 		t.Fatalf("baseline state: %+v err=%v", w, err)
@@ -63,6 +67,14 @@ func TestRunCreatesBaselineThenChangeEvent(t *testing.T) {
 	outbox, err := s.PendingOutbox(ctx, 10)
 	if err != nil || len(outbox) != 0 {
 		t.Fatalf("pending should be delayed after failed delivery: %v err=%v", outbox, err)
+	}
+	pending, err := s.PendingOutboxCount(ctx)
+	if err != nil || pending != 1 {
+		t.Fatalf("pending count=%d err=%v", pending, err)
+	}
+	lastRun, err := s.LatestRun(ctx)
+	if err != nil || lastRun.Status != "error" || lastRun.Changed != 1 {
+		t.Fatalf("last run record: %+v err=%v", lastRun, err)
 	}
 }
 

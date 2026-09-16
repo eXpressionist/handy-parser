@@ -62,3 +62,14 @@ type RunSummary struct {
 	Errors  int
 	Skipped bool
 }
+
+type RunRecord struct {
+	ID         int64
+	StartedAt  time.Time
+	FinishedAt *time.Time
+	Status     string
+	Checked    int
+	Changed    int
+	Errors     int
+	Message    string
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -228,8 +229,19 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "database error", 500)
 		return
 	}
+	var lastRun *model.RunRecord
+	if run, runErr := s.store.LatestRun(r.Context()); runErr == nil {
+		lastRun = &run
+	} else if runErr != sql.ErrNoRows {
+		s.logger.Warn("load latest run", "error", runErr)
+	}
+	pending, err := s.store.PendingOutboxCount(r.Context())
+	if err != nil {
+		http.Error(w, "database error", http.StatusInternalServerError)
+		return
+	}
 	sess, _ := r.Context().Value(sessionKey).(session)
-	s.render(w, pageData{CSRF: sess.csrf, Watches: watches, Changes: changes, Message: r.URL.Query().Get("msg"), TelegramConfigured: s.telegram.Configured()})
+	s.render(w, pageData{CSRF: sess.csrf, Watches: watches, Changes: changes, LastRun: lastRun, PendingOutbox: pending, Message: r.URL.Query().Get("msg"), TelegramConfigured: s.telegram.Configured()})
 }
 
 func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
@@ -449,4 +461,6 @@ type pageData struct {
 	Changes                                  []model.Change
 	Form                                     model.Watch
 	Observation                              model.Observation
+	LastRun                                  *model.RunRecord
+	PendingOutbox                            int
 }
