@@ -74,18 +74,28 @@ func run(logger *slog.Logger) error {
 		if cfg.AdminPassword == "" {
 			return fmt.Errorf("admin password is required for serve")
 		}
-		webServer, err := webapp.New(s, extractor, checkRunner, telegram, cfg.AdminPassword, cfg.DisplayTimezone, logger)
+		schedule, err := runner.ParseDailySchedule(cfg.CheckSchedule)
+		if err != nil {
+			return fmt.Errorf("parse HANDY_CHECK_SCHEDULE: %w", err)
+		}
+		location, err := time.LoadLocation(cfg.DisplayTimezone)
+		if err != nil {
+			return fmt.Errorf("load display timezone %q: %w", cfg.DisplayTimezone, err)
+		}
+		scheduleLabel := cfg.CheckSchedule + " (" + cfg.DisplayTimezone + ")"
+		webServer, err := webapp.New(s, extractor, checkRunner, telegram, cfg.AdminPassword, cfg.DisplayTimezone, scheduleLabel, logger)
 		if err != nil {
 			return err
 		}
+		serveCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		go checkRunner.RunSchedule(serveCtx, schedule, location)
 		httpServer := &http.Server{Addr: cfg.Listen, Handler: webServer.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
 		serverErr := make(chan error, 1)
 		go func() {
 			logger.Info("web server listening", "address", cfg.Listen)
 			serverErr <- httpServer.ListenAndServe()
 		}()
-		serveCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
 		select {
 		case <-serveCtx.Done():
 			shutdownCtx, c := context.WithTimeout(context.Background(), 10*time.Second)

@@ -54,6 +54,7 @@ HANDY_TELEGRAM_TOKEN=123456789:replace-with-bot-token
 HANDY_TELEGRAM_CHAT_ID=123456789
 
 HANDY_DISPLAY_TIMEZONE=Europe/Moscow
+HANDY_CHECK_SCHEDULE=00:00,06:00,12:00,18:00
 ```
 
 - `HANDY_WEB_BIND=0.0.0.0` публикует панель на всех сетевых интерфейсах VPS.
@@ -61,6 +62,7 @@ HANDY_DISPLAY_TIMEZONE=Europe/Moscow
 - `HANDY_ADMIN_PASSWORD` — отдельный длинный пароль для входа в панель.
 - `HANDY_TELEGRAM_TOKEN` — token, выданный `@BotFather`.
 - `HANDY_TELEGRAM_CHAT_ID` — ID личного чата или группы для уведомлений.
+- `HANDY_CHECK_SCHEDULE` — время автоматических проверок в часовом поясе `HANDY_DISPLAY_TIMEZONE`.
 
 `.env` содержит секреты и уже исключён из Git. Сохраняйте права `0600`, не публикуйте файл и не вставляйте его содержимое в обращения или логи.
 
@@ -146,27 +148,32 @@ sudo docker compose run --rm -T check
 
 Первая успешная проверка сохраняет исходное значение и не отправляет уведомление об изменении.
 
-## 6. Включить проверки четыре раза в день
+## 6. Автоматические проверки
 
-```sh
-sudo install -m 0644 deploy/handy-parser-check.service.example \
-  /etc/systemd/system/handy-parser-check.service
-sudo install -m 0644 deploy/handy-parser-check.timer.example \
-  /etc/systemd/system/handy-parser-check.timer
-sudo systemd-analyze verify /etc/systemd/system/handy-parser-check.service \
-  /etc/systemd/system/handy-parser-check.timer
-sudo systemctl daemon-reload
-sudo systemctl enable --now handy-parser-check.timer
-systemctl list-timers handy-parser-check.timer
+Планировщик уже работает внутри контейнера `web`; настраивать cron или systemd не нужно. По умолчанию проверки запускаются в 00:00, 06:00, 12:00 и 18:00 по `Europe/Moscow`.
+
+Чтобы изменить расписание, отредактируйте `.env`, например:
+
+```dotenv
+HANDY_DISPLAY_TIMEZONE=Europe/Moscow
+HANDY_CHECK_SCHEDULE=01:30,07:30,13:30,19:30
 ```
 
-Расписание по умолчанию: 00:00, 06:00, 12:00 и 18:00 по `Europe/Moscow`. Оно задаётся в `handy-parser-check.timer`. `Persistent=true` запускает одну пропущенную проверку после простоя сервера.
-
-Проверка таймера вручную:
+Применить изменение:
 
 ```sh
-sudo systemctl start handy-parser-check.service
-sudo journalctl -u handy-parser-check.service -n 50 --no-pager
+sudo docker compose up -d --force-recreate web
+```
+
+Расписание отображается в блоке управления веб-панели. При совпадении автоматического и ручного запуска SQLite-блокировка оставляет только одну серию проверок.
+
+Если раньше устанавливался systemd timer из предыдущей версии проекта, удалите его один раз:
+
+```sh
+sudo systemctl disable --now handy-parser-check.timer 2>/dev/null || true
+sudo rm -f /etc/systemd/system/handy-parser-check.timer \
+  /etc/systemd/system/handy-parser-check.service
+sudo systemctl daemon-reload
 ```
 
 ## 7. Диагностика
@@ -175,20 +182,16 @@ sudo journalctl -u handy-parser-check.service -n 50 --no-pager
 sudo docker compose ps
 sudo docker compose logs --tail=100 web
 sudo docker stats --no-stream
-sudo systemctl status handy-parser-check.timer
-sudo journalctl -u handy-parser-check.service --since today
 ```
 
-Контейнер `web` ограничен 96 МиБ, временный `check` — 192 МиБ. После плановой проверки `check` автоматически удаляется.
+Контейнер `web` ограничен 96 МиБ и остаётся единственным постоянно работающим компонентом. Планировщик спит между запусками и не создаёт дополнительные контейнеры. Сервис `check` в Compose оставлен только для ручной диагностики из командной строки.
 
 ## 8. Обновление
 
 ```sh
 cd /opt/handy-parser
-sudo systemctl stop handy-parser-check.timer
 git pull --ff-only
 sudo docker compose up -d --build web
-sudo systemctl start handy-parser-check.timer
 ```
 
 Перед обновлением рекомендуется сделать резервную копию.
@@ -199,17 +202,14 @@ SQLite работает в режиме WAL, поэтому для просто�
 
 ```sh
 cd /opt/handy-parser
-sudo systemctl stop handy-parser-check.timer
-sudo systemctl stop handy-parser-check.service
 sudo docker compose stop web
 sudo install -d -m 0700 backups
 sudo sh -c 'umask 077; tar -czf "backups/handy-parser-$(date +%Y%m%d-%H%M%S).tar.gz" data .env'
 sudo docker compose up -d web
-sudo systemctl start handy-parser-check.timer
 ```
 
 Архив содержит базу и `.env`, включая пароль и Telegram token. Храните его в защищённом месте вне VPS.
 
-Для восстановления остановите timer/service/web, распакуйте доверенный архив, выполните `sudo chown -R 10001:10001 data`, затем запустите миграцию и web-компонент командами из раздела 4.
+Для восстановления остановите `web`, распакуйте доверенный архив, выполните `sudo chown -R 10001:10001 data`, затем запустите web-компонент командами из раздела 4.
 
 Не используйте `docker compose down -v` и команды глобальной очистки Docker: на VPS работают другие приложения.

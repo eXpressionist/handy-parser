@@ -9,7 +9,7 @@ import (
 )
 
 func TestLoginDoesNotDependOnBrowserOriginHeader(t *testing.T) {
-	server, err := New(nil, nil, nil, nil, "correct-password", "Europe/Moscow", slog.Default())
+	server, err := New(nil, nil, nil, nil, "correct-password", "Europe/Moscow", "00:00,06:00,12:00,18:00", slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

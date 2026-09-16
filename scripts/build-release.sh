@@ -19,11 +19,8 @@ if [[ -e "$stage_dir" || -e "$archive" ]]; then
 fi
 
 mkdir -p "$stage_dir"
-cp "$root_dir/deploy/compose.yaml.example" "$stage_dir/compose.yaml"
-mkdir -p "$stage_dir/deploy"
+cp "$root_dir/compose.yaml" "$stage_dir/compose.yaml"
 cp "$root_dir/.env.example" "$stage_dir/.env.example"
-cp "$root_dir/deploy/handy-parser-check.service.example" "$stage_dir/deploy/"
-cp "$root_dir/deploy/handy-parser-check.timer.example" "$stage_dir/deploy/"
 cp "$root_dir/.dockerignore" "$root_dir/Dockerfile" "$root_dir/go.mod" "$root_dir/go.sum" "$stage_dir/"
 cp -R "$root_dir/cmd" "$root_dir/internal" "$stage_dir/"
 cp "$root_dir/docs/INSTALLATION.md" "$stage_dir/INSTALLATION.md"

@@ -18,6 +18,7 @@ type Config struct {
 	CheckTimeout       time.Duration
 	MaxResponseBytes   int64
 	DisplayTimezone    string
+	CheckSchedule      string
 	AllowPrivateTarget bool
 }
 
@@ -27,6 +28,7 @@ func Load() (Config, error) {
 		Listen:           env("HANDY_LISTEN", "127.0.0.1:8080"),
 		TelegramChatID:   strings.TrimSpace(os.Getenv("HANDY_TELEGRAM_CHAT_ID")),
 		DisplayTimezone:  env("HANDY_DISPLAY_TIMEZONE", "Europe/Moscow"),
+		CheckSchedule:    env("HANDY_CHECK_SCHEDULE", "00:00,06:00,12:00,18:00"),
 		MaxResponseBytes: 2 * 1024 * 1024,
 	}
 	var err error

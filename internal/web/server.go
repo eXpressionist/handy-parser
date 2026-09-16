@@ -43,6 +43,7 @@ type Server struct {
 	runner    *runner.Runner
 	telegram  *notify.Telegram
 	password  string
+	schedule  string
 	logger    *slog.Logger
 	template  *template.Template
 	mu        sync.Mutex
@@ -50,7 +51,7 @@ type Server struct {
 	attempts  map[string]loginAttempt
 }
 
-func New(s *store.Store, e *extract.Extractor, r *runner.Runner, t *notify.Telegram, password, timezone string, logger *slog.Logger) (*Server, error) {
+func New(s *store.Store, e *extract.Extractor, r *runner.Runner, t *notify.Telegram, password, timezone, schedule string, logger *slog.Logger) (*Server, error) {
 	location, err := time.LoadLocation(timezone)
 	if err != nil {
 		return nil, fmt.Errorf("load display timezone %q: %w", timezone, err)
@@ -76,7 +77,7 @@ func New(s *store.Store, e *extract.Extractor, r *runner.Runner, t *notify.Teleg
 	if err != nil {
 		return nil, err
 	}
-	return &Server{store: s, extractor: e, runner: r, telegram: t, password: password, logger: logger, template: tmpl, sessions: map[string]session{}, attempts: map[string]loginAttempt{}}, nil
+	return &Server{store: s, extractor: e, runner: r, telegram: t, password: password, schedule: schedule, logger: logger, template: tmpl, sessions: map[string]session{}, attempts: map[string]loginAttempt{}}, nil
 }
 
 func (s *Server) Handler() http.Handler {
@@ -242,7 +243,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess, _ := r.Context().Value(sessionKey).(session)
-	s.render(w, pageData{CSRF: sess.csrf, Watches: watches, Changes: changes, LastRun: lastRun, PendingOutbox: pending, FailedOutbox: failed, Message: r.URL.Query().Get("msg"), TelegramConfigured: s.telegram.Configured()})
+	s.render(w, pageData{CSRF: sess.csrf, Watches: watches, Changes: changes, LastRun: lastRun, PendingOutbox: pending, FailedOutbox: failed, Schedule: s.schedule, Message: r.URL.Query().Get("msg"), TelegramConfigured: s.telegram.Configured()})
 }
 
 func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
@@ -479,6 +480,7 @@ func securityHeaders(next http.Handler) http.Handler {
 type pageData struct {
 	Login, Preview, Edit, TelegramConfigured bool
 	CSRF, Message                            string
+	Schedule                                 string
 	Watches                                  []model.Watch
 	Changes                                  []model.Change
 	Form                                     model.Watch
