@@ -30,7 +30,17 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o /tmp/handy-parser-amd64 ./cmd/handy-parser
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o /tmp/handy-parser-arm64 ./cmd/handy-parser
       - name: Validate Compose
-        run: docker compose config --quiet
+        shell: bash
+        run: |
+          HANDY_WEB_BIND=0.0.0.0 \
+          HANDY_WEB_PORT=18080 \
+          HANDY_ADMIN_PASSWORD=ci-only-password \
+          HANDY_TELEGRAM_TOKEN=ci-only-token \
+          HANDY_TELEGRAM_CHAT_ID=42 \
+            docker compose config --format json > /tmp/compose.json
+          jq -e '.services.web.ports[0].host_ip == "0.0.0.0"' /tmp/compose.json
+          jq -e '.services.web.ports[0].published == "18080"' /tmp/compose.json
+          jq -e '.services.web.image == "handy-parser:local"' /tmp/compose.json
       - name: Build container image
         run: docker build --tag handy-parser:ci .
       - name: Smoke test container as runtime user
@@ -69,10 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           output_dir="$(mktemp -d)"
-          bash ./scripts/build-release.sh v0.0.0-ci "$output_dir" ghcr.io/expressionist/handy-parser:edge
+          bash ./scripts/build-release.sh v0.0.0-ci "$output_dir"
           (cd "$output_dir" && sha256sum --check handy-parser-v0.0.0-ci.tar.gz.sha256)
           tar -xzf "$output_dir/handy-parser-v0.0.0-ci.tar.gz" -C "$output_dir"
-          mkdir -p "$output_dir/handy-parser-v0.0.0-ci/secrets"
-          touch "$output_dir/handy-parser-v0.0.0-ci/secrets/admin_password"
-          touch "$output_dir/handy-parser-v0.0.0-ci/secrets/telegram_bot_token"
           docker compose -f "$output_dir/handy-parser-v0.0.0-ci/compose.yaml" config --quiet

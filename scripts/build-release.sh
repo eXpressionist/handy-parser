@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 ]]; then
-  echo "usage: $0 VERSION OUTPUT_DIR IMAGE_REFERENCE" >&2
+if [[ $# -ne 2 ]]; then
+  echo "usage: $0 VERSION OUTPUT_DIR" >&2
   exit 2
 fi
 
 version="$1"
 output_dir="$2"
-image_reference="$3"
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 package_name="handy-parser-${version}"
 stage_dir="${output_dir}/${package_name}"
@@ -20,11 +19,13 @@ if [[ -e "$stage_dir" || -e "$archive" ]]; then
 fi
 
 mkdir -p "$stage_dir"
-sed "s|ghcr.io/expressionist/handy-parser:v0.1.0|${image_reference}|" \
-  "$root_dir/deploy/compose.yaml.example" > "$stage_dir/compose.yaml"
-cp "$root_dir/deploy/.env.example" "$stage_dir/.env.example"
-cp "$root_dir/deploy/handy-parser-check.service.example" "$stage_dir/handy-parser-check.service"
-cp "$root_dir/deploy/handy-parser-check.timer.example" "$stage_dir/handy-parser-check.timer"
+cp "$root_dir/deploy/compose.yaml.example" "$stage_dir/compose.yaml"
+mkdir -p "$stage_dir/deploy"
+cp "$root_dir/.env.example" "$stage_dir/.env.example"
+cp "$root_dir/deploy/handy-parser-check.service.example" "$stage_dir/deploy/"
+cp "$root_dir/deploy/handy-parser-check.timer.example" "$stage_dir/deploy/"
+cp "$root_dir/.dockerignore" "$root_dir/Dockerfile" "$root_dir/go.mod" "$root_dir/go.sum" "$stage_dir/"
+cp -R "$root_dir/cmd" "$root_dir/internal" "$stage_dir/"
 cp "$root_dir/docs/INSTALLATION.md" "$stage_dir/INSTALLATION.md"
 printf '%s\n' "$version" > "$stage_dir/VERSION"
 

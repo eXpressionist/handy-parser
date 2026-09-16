@@ -1,15 +1,15 @@
 # Установка и эксплуатация
 
-Dockerfile и Compose уже находятся в репозитории. Текущая основная ветка публикуется как multi-arch образ `ghcr.io/expressionist/handy-parser:edge`, однако установка на Debian 13 ещё не прошла приёмочные проверки. До первого тега этот документ служит инструкцией для тестового окружения. Файлы `deploy/*.example` остаются шаблонами systemd и будущего release-развёртывания.
+Handy Parser собирается Docker напрямую из исходников репозитория. На сервере не требуется устанавливать Go или другие зависимости приложения. Все пользовательские настройки хранятся в одном файле `.env`.
 
-## 1. Требования
+## 1. Что потребуется
 
-- Debian 13, доступ по SSH и sudo, Docker Engine с Compose plugin.
-- Исходящие HTTPS-запросы к сайтам, api.telegram.org и GHCR.
-- До 10 наблюдений. Около 800 МБ свободной RAM достаточно для проверки выбранной архитектуры, но фактическое потребление измеряется перед релизом.
-- Образ для архитектуры VPS: `uname -m` (`x86_64` → amd64, `aarch64` → arm64).
+- Debian 13 с Docker Engine и Compose plugin;
+- около 800 МБ свободной RAM на время сборки;
+- исходящий HTTPS-доступ к контролируемым сайтам и `api.telegram.org`;
+- свободный TCP-порт для панели управления.
 
-Проверить уже установленный Docker:
+Проверка Docker:
 
 ```sh
 docker --version
@@ -17,113 +17,136 @@ docker compose version
 sudo docker info
 ```
 
-Если Docker отсутствует, установить Engine и Compose plugin по [официальной инструкции Docker для Debian](https://docs.docker.com/engine/install/debian/). Использовать apt-репозиторий Docker. Не переустанавливать и не удалять работающие контейнеры других приложений. Docker Engine и containerd имеют собственный расход RAM, который нужно включить в замеры.
+Если Docker ещё не установлен, используйте [официальную инструкцию Docker для Debian](https://docs.docker.com/engine/install/debian/). Установка Handy Parser не требует изменения или остановки других Compose-проектов.
 
-## 2. Получить файлы версии
-
-Для тестирования текущей ветки:
+## 2. Скачать проект
 
 ```sh
 sudo install -d -m 0755 /opt/handy-parser
 sudo chown "$(id -u):$(id -g)" /opt/handy-parser
-git clone --depth 1 https://github.com/eXpressionist/handy-parser.git /opt/handy-parser
+git clone https://github.com/eXpressionist/handy-parser.git /opt/handy-parser
 cd /opt/handy-parser
-cp deploy/.env.example .env
-```
-
-Указанная папка должна быть пустой перед clone. Корневой `compose.yaml` по умолчанию загружает `edge`, а секция `build` позволяет разработчику собрать тот же образ локально. После `v0.1.0` инструкция будет переключена на неизменяемый версионированный тег/digest и deploy-архив с контрольной суммой.
-
-На VPS используется готовый образ: компилировать Go и modernc SQLite на слабом сервере не требуется.
-
-## 3. Telegram и секреты
-
-1. Создать бота через официальный `@BotFather`, сохранить токен только на VPS.
-2. Отправить боту `/start` со своего аккаунта.
-3. Получить chat_id своего чата через Bot API `getUpdates` локально; не отправлять токен сторонним ботам/сайтам. Для группового чата использовать его chat_id и проверить доступ бота.
-4. В `.env` заполнить `HANDY_TELEGRAM_CHAT_ID`. До первого релиза `HANDY_PARSER_IMAGE` задаёт только локальный тег собранного образа; после релиза он будет указывать на опубликованный тег или digest.
-
-Подготовить каталоги:
-
-```sh
+cp .env.example .env
 sudo install -d -o 10001 -g 10001 -m 0700 data
-sudo install -d -o root -g root -m 0700 secrets
-sudo install -o 10001 -g 10001 -m 0400 /dev/null secrets/telegram_bot_token
-sudo install -o 10001 -g 10001 -m 0400 /dev/null secrets/admin_password
-sudo nano secrets/telegram_bot_token
-sudo nano secrets/admin_password
-sudo chown 10001:10001 secrets/telegram_bot_token secrets/admin_password
-sudo chmod 0400 secrets/telegram_bot_token secrets/admin_password
 chmod 0600 .env
 ```
 
-Первый файл содержит токен, второй — длинный уникальный пароль панели; по одному значению без кавычек. Секреты монтируются как файлы. В обычном Docker Compose это не зашифрованное хранилище: исходные файлы на VPS необходимо защищать правами. Проверка прав именно для UID 10001 обязательна в тесте установки.
+Если каталог уже содержит установленную версию, повторно выполнять `git clone` не нужно.
 
-Для получения chat_id можно выполнить локально на VPS следующий Python-скрипт без помещения токена в историю команд или аргументы процесса. Он не печатает токен и полный ответ с сообщениями:
+## 3. Настроить `.env`
+
+Откройте файл:
 
 ```sh
-sudo python3 - <<'PY'
+nano .env
+```
+
+Сгенерировать пароль панели можно командой `openssl rand -hex 24`, затем вставить результат в `HANDY_ADMIN_PASSWORD`.
+
+Основные параметры:
+
+```dotenv
+HANDY_WEB_BIND=0.0.0.0
+HANDY_WEB_PORT=8080
+HANDY_ADMIN_PASSWORD=replace-with-a-long-random-password
+
+HANDY_TELEGRAM_TOKEN=123456789:replace-with-bot-token
+HANDY_TELEGRAM_CHAT_ID=123456789
+
+HANDY_DISPLAY_TIMEZONE=Europe/Moscow
+```
+
+- `HANDY_WEB_BIND=0.0.0.0` публикует панель на всех сетевых интерфейсах VPS.
+- `HANDY_WEB_PORT` задаёт внешний порт. Внутри контейнера приложение продолжает использовать порт 8080.
+- `HANDY_ADMIN_PASSWORD` — отдельный длинный пароль для входа в панель.
+- `HANDY_TELEGRAM_TOKEN` — token, выданный `@BotFather`.
+- `HANDY_TELEGRAM_CHAT_ID` — ID личного чата или группы для уведомлений.
+
+`.env` содержит секреты и уже исключён из Git. Сохраняйте права `0600`, не публикуйте файл и не вставляйте его содержимое в обращения или логи.
+
+### Как получить Chat ID
+
+1. Создайте бота через `@BotFather`.
+2. Отправьте новому боту `/start`.
+3. Заполните `HANDY_TELEGRAM_TOKEN` в `.env` и выполните скрипт ниже.
+
+Он не выводит token в терминал:
+
+```sh
+python3 - <<'PY'
 import json
 from pathlib import Path
 from urllib.request import urlopen
 
-token = Path('secrets/telegram_bot_token').read_text().strip()
-try:
-    with urlopen('https://api.telegram.org/bot' + token + '/getUpdates', timeout=20) as response:
-        payload = json.load(response)
-    seen = set()
-    for update in payload.get('result', []):
-        message = update.get('message', {})
-        chat = message.get('chat', {})
-        if chat.get('id') not in seen and 'id' in chat:
-            print('chat_id:', chat['id'], 'type:', chat.get('type'))
-            seen.add(chat['id'])
-    if not seen:
-        print('Нет обновлений: отправьте /start новому боту и повторите.')
-except Exception:
-    print('Не удалось получить обновления; проверьте сеть, токен и отсутствие webhook.')
-    raise SystemExit(1)
+values = {}
+for line in Path('.env').read_text().splitlines():
+    line = line.strip()
+    if line and not line.startswith('#') and '=' in line:
+        key, value = line.split('=', 1)
+        values[key] = value.strip().strip('"').strip("'")
+
+token = values.get('HANDY_TELEGRAM_TOKEN', '')
+if not token:
+    raise SystemExit('Сначала заполните HANDY_TELEGRAM_TOKEN в .env')
+
+with urlopen('https://api.telegram.org/bot' + token + '/getUpdates', timeout=20) as response:
+    payload = json.load(response)
+
+seen = set()
+for update in payload.get('result', []):
+    message = update.get('message', {})
+    chat = message.get('chat', {})
+    if 'id' in chat and chat['id'] not in seen:
+        print('chat_id:', chat['id'], 'type:', chat.get('type'))
+        seen.add(chat['id'])
+if not seen:
+    print('Нет обновлений: отправьте боту /start и повторите.')
 PY
 ```
 
-Для продукта рекомендуется отдельный новый бот, чтобы не конфликтовать с webhook или getUpdates существующих приложений. Приложение отправляет уведомления через sendMessage, приём команд Telegram в первой версии не требуется.
-
-## 4. Запустить панель
+## 4. Собрать и запустить
 
 ```sh
-sudo docker compose --env-file .env config --quiet
-sudo docker compose --env-file .env pull web check
-sudo docker compose --env-file .env run --rm -T check migrate
-sudo docker compose --env-file .env up -d web
+cd /opt/handy-parser
+sudo docker compose config --quiet
+sudo docker compose up -d --build web
 sudo docker compose ps
 ```
 
-Ожидается контейнер web со статусом healthy. Открытый порт привязан только к localhost VPS. На своём компьютере создать туннель:
+Сборка выполняется с одним процессом компиляции, чтобы снизить пиковую нагрузку на слабый VPS. Миграции SQLite применяются автоматически перед запуском панели. После сборки компилятор не попадает в рабочий образ и не расходует память.
 
-```sh
-ssh -N -L 18080:127.0.0.1:8080 USER@VPS
+Откройте в браузере:
+
+```text
+http://IP_СЕРВЕРА:HANDY_WEB_PORT
 ```
 
-Открыть `http://localhost:18080` и войти с паролем из admin_password. Для внешнего HTTPS-домена использовать существующий reverse proxy и соответствующий режим secure cookie; прямое публичное открытие 8080 не является штатной настройкой.
+Например, при IP `203.0.113.10` и порте `8080`: `http://203.0.113.10:8080`.
 
-## 5. Добавить наблюдения
-
-GPC: исходный URL из research/README.md, метод HTML, селектор `meta[name="product:price:amount"]`, атрибут `content`, тип «цена», валюта GEL. Нажать «Предпросмотр», сверить товар и сохранить.
-
-PSP: метод PSP, исходная ссылка, предпросмотр названия/SKU и действующей цены, затем сохранение. Поле скидочной цены CSS не требуется.
-
-Правило по умолчанию — любое изменение. Первая успешная проверка создаёт исходное значение и не считается изменением.
-
-Ручной запуск всего списка:
+Проверьте firewall VPS. Рекомендуемый начальный вариант — разрешить порт только со своего внешнего IP:
 
 ```sh
-sudo docker compose --env-file .env run --rm -T check
+sudo ufw allow from ВАШ_ВНЕШНИЙ_IP to any port 8080 proto tcp
 ```
 
-Проверить статусы в панели. Кнопка «Тест Telegram» отправляет отдельное контрольное сообщение; постоянные ошибки доставки и ожидающая очередь отображаются в блоке управления.
+Замените `8080` значением `HANDY_WEB_PORT`. Прямое соединение использует HTTP, поэтому для постоянного доступа через интернет рекомендуется HTTPS reverse proxy. До настройки HTTPS ограничьте порт своим IP или VPN.
 
-## 6. Включить расписание
+## 5. Первичная проверка
 
-Выбранное расписание по умолчанию: 00:00, 06:00, 12:00, 18:00 **Europe/Moscow**. Оно предварительное и редактируется в timer. `HANDY_DISPLAY_TIMEZONE` отвечает за отображение времени, а не изменяет systemd-расписание.
+1. Войдите с `HANDY_ADMIN_PASSWORD`.
+2. Нажмите «Тест Telegram» и убедитесь, что сообщение пришло.
+3. Добавьте страницу и сначала используйте «Предпросмотр».
+4. Нажмите «Проверить всё» либо выполните:
+
+```sh
+sudo docker compose run --rm -T check
+```
+
+Для GPC можно оставить CSS-селектор пустым: встроенный профиль подставит стабильный meta-селектор. Для PSP достаточно выбрать метод PSP и указать URL товара.
+
+Первая успешная проверка сохраняет исходное значение и не отправляет уведомление об изменении.
+
+## 6. Включить проверки четыре раза в день
 
 ```sh
 sudo install -m 0644 deploy/handy-parser-check.service.example \
@@ -132,39 +155,47 @@ sudo install -m 0644 deploy/handy-parser-check.timer.example \
   /etc/systemd/system/handy-parser-check.timer
 sudo systemd-analyze verify /etc/systemd/system/handy-parser-check.service \
   /etc/systemd/system/handy-parser-check.timer
-systemd-analyze calendar '*-*-* 00,06,12,18:00:00 Europe/Moscow'
 sudo systemctl daemon-reload
 sudo systemctl enable --now handy-parser-check.timer
 systemctl list-timers handy-parser-check.timer
 ```
 
-`Persistent=true` запускает одну догоняющую проверку после простоя, если было пропущено хотя бы одно срабатывание. Точное срабатывание допускает погрешность до минуты. Повторные серии не должны выполняться параллельно: общая блокировка приложения обязательна.
+Расписание по умолчанию: 00:00, 06:00, 12:00 и 18:00 по `Europe/Moscow`. Оно задаётся в `handy-parser-check.timer`. `Persistent=true` запускает одну пропущенную проверку после простоя сервера.
 
-Проверка через systemd вручную:
+Проверка таймера вручную:
 
 ```sh
 sudo systemctl start handy-parser-check.service
 sudo journalctl -u handy-parser-check.service -n 50 --no-pager
 ```
 
-Временный контейнер имеет фиксированное имя handy-parser-check. ExecStopPost пытается остановить именно его при завершении/прерывании сервиса, чтобы не оставить работающую проверку после timeout. Работоспособность этого поведения проверяется на Debian перед релизом.
-
-## 7. Наблюдение и обслуживание
+## 7. Диагностика
 
 ```sh
+sudo docker compose ps
 sudo docker compose logs --tail=100 web
 sudo docker stats --no-stream
 sudo systemctl status handy-parser-check.timer
 sudo journalctl -u handy-parser-check.service --since today
 ```
 
-Web ограничен 96 МиБ, check — 192 МиБ. Это пределы, а не измеренное потребление. После проверки контейнер check исчезает; остаются web и инфраструктура Docker. Результаты разовых проверок также сохраняются в БД, потому что логи удалённого контейнера недоступны через compose logs.
+Контейнер `web` ограничен 96 МиБ, временный `check` — 192 МиБ. После плановой проверки `check` автоматически удаляется.
 
-Пауза всех проверок: `sudo systemctl stop handy-parser-check.timer`. Уже запущенная серия продолжится; чтобы прервать и её, остановить service. Индивидуальное наблюдение приостанавливается через панель.
+## 8. Обновление
 
-## 8. Резервная копия
+```sh
+cd /opt/handy-parser
+sudo systemctl stop handy-parser-check.timer
+git pull --ff-only
+sudo docker compose up -d --build web
+sudo systemctl start handy-parser-check.timer
+```
 
-Для малого объёма достаточно короткой остановки обоих источников записи. Нельзя копировать только основной SQLite-файл во время работы WAL.
+Перед обновлением рекомендуется сделать резервную копию.
+
+## 9. Резервная копия и восстановление
+
+SQLite работает в режиме WAL, поэтому для простой согласованной копии на короткое время остановите источники записи:
 
 ```sh
 cd /opt/handy-parser
@@ -172,28 +203,13 @@ sudo systemctl stop handy-parser-check.timer
 sudo systemctl stop handy-parser-check.service
 sudo docker compose stop web
 sudo install -d -m 0700 backups
-sudo sh -c 'umask 077; tar -czf "backups/data-$(date +%Y%m%d-%H%M%S).tar.gz" data .env'
+sudo sh -c 'umask 077; tar -czf "backups/handy-parser-$(date +%Y%m%d-%H%M%S).tar.gz" data .env'
 sudo docker compose up -d web
 sudo systemctl start handy-parser-check.timer
 ```
 
-Перед архивированием убедиться, что ручные контейнеры check также завершены. Пароль и токен резервировать отдельно в защищённом хранилище; они не включены в архив выше. Перенести резервную копию вне VPS, ограничить срок хранения.
+Архив содержит базу и `.env`, включая пароль и Telegram token. Храните его в защищённом месте вне VPS.
 
-Восстановление: остановить timer/service/web, сохранить текущую data отдельно, распаковать доверенный архив в пустую папку установки, восстановить владельца 10001:10001 для data и права секретов. Запустить совместимую с этой БД версию образа, проверить историю, затем включить timer. Проверку восстановления провести до первого релиза.
+Для восстановления остановите timer/service/web, распакуйте доверенный архив, выполните `sudo chown -R 10001:10001 data`, затем запустите миграцию и web-компонент командами из раздела 4.
 
-## 9. Обновление и откат
-
-1. Прочитать release notes и совместимость миграций.
-2. Скачать новый образ, остановить timer/service/web, сделать согласованную резервную копию.
-3. Указать новый фиксированный тег/digest в `.env`, выполнить `compose run --rm -T check migrate`.
-4. Запустить web, дождаться healthy, проверить оба источника, включить timer.
-5. При необходимости отката вернуть предыдущий образ **и совместимую резервную копию БД**; старый бинарник может не понимать новую схему.
-
-Не применять `docker compose down -v` или очистку Docker ко всем приложениям VPS. Обновление Handy Parser затрагивает только его проект Compose.
-
-## Источники
-
-- [Docker Engine на Debian](https://docs.docker.com/engine/install/debian/).
-- [Параметры сервисов Compose](https://docs.docker.com/reference/compose-file/services/).
-- [Таймеры systemd в Debian 13](https://manpages.debian.org/trixie/systemd/systemd.timer.5.en.html).
-- [Telegram Bot API](https://core.telegram.org/bots/api).
+Не используйте `docker compose down -v` и команды глобальной очистки Docker: на VPS работают другие приложения.

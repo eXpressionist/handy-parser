@@ -49,7 +49,20 @@ go build -o handy-parser ./cmd/handy-parser
 HANDY_ADMIN_PASSWORD='replace-me' ./handy-parser serve
 ```
 
-По умолчанию база создаётся в `data/handy.db`, панель доступна на `127.0.0.1:8080`. Для Docker нужны файлы `secrets/admin_password` и `secrets/telegram_bot_token`; полный порядок описан в инструкции установки. Тег `edge` предназначен для тестирования и меняется при каждом обновлении основной ветки.
+По умолчанию база создаётся в `data/handy.db`. При установке через Docker все пользовательские настройки находятся в `.env`: пароль панели, Telegram token/chat ID, внешний адрес и порт. Docker собирает образ непосредственно из исходников репозитория; полный порядок описан в инструкции установки.
+
+## Быстрый запуск через Docker
+
+```sh
+git clone https://github.com/eXpressionist/handy-parser.git
+cd handy-parser
+cp .env.example .env
+nano .env
+sudo install -d -o 10001 -g 10001 -m 0700 data
+sudo docker compose up -d --build web
+```
+
+После запуска панель доступна по адресу `http://IP_СЕРВЕРА:HANDY_WEB_PORT`. Перед открытием порта для всего интернета настройте firewall или HTTPS reverse proxy.
 
 ## Порядок работы
 

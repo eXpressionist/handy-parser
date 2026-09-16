@@ -1,8 +1,9 @@
-# Design template. No application image has been released yet.
 name: handy-parser
 
 x-common: &common
-  image: ${HANDY_PARSER_IMAGE:-ghcr.io/expressionist/handy-parser:v0.1.0}
+  build:
+    context: .
+  image: handy-parser:local
   user: "10001:10001"
   read_only: true
   init: true
@@ -26,7 +27,7 @@ x-env: &common-env
   HANDY_CHECK_TIMEOUT: 4m
   HANDY_HTTP_TIMEOUT: 20s
   HANDY_MAX_RESPONSE_BYTES: "2097152"
-  HANDY_TELEGRAM_TOKEN_FILE: /run/secrets/telegram_bot_token
+  HANDY_TELEGRAM_TOKEN: ${HANDY_TELEGRAM_TOKEN:-}
   HANDY_TELEGRAM_CHAT_ID: ${HANDY_TELEGRAM_CHAT_ID:-}
   HANDY_DISPLAY_TIMEZONE: ${HANDY_DISPLAY_TIMEZONE:-Europe/Moscow}
 
@@ -41,12 +42,9 @@ services:
       <<: *common-env
       GOMEMLIMIT: 64MiB
       HANDY_LISTEN: "0.0.0.0:8080"
-      HANDY_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      HANDY_ADMIN_PASSWORD: ${HANDY_ADMIN_PASSWORD:-}
     ports:
-      - "127.0.0.1:8080:8080"
-    secrets:
-      - telegram_bot_token
-      - admin_password
+      - "${HANDY_WEB_BIND:-0.0.0.0}:${HANDY_WEB_PORT:-8080}:8080"
     healthcheck:
       test: [CMD, /app/handy-parser, healthcheck]
       interval: 60s
@@ -64,11 +62,3 @@ services:
     environment:
       <<: *common-env
       GOMEMLIMIT: 128MiB
-    secrets:
-      - telegram_bot_token
-
-secrets:
-  telegram_bot_token:
-    file: ./secrets/telegram_bot_token
-  admin_password:
-    file: ./secrets/admin_password

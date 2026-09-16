@@ -72,7 +72,7 @@
 
 - [x] Создать multi-stage Dockerfile с фиксированным toolchain, non-root runtime, CA certificates и timezone data при необходимости.
 - [x] Реализовать healthcheck и graceful shutdown; перенести проверенные примеры в рабочие deploy-файлы.
-- [x] Проверить права volume для UID 10001 и запуск read-only контейнера; права secret-файлов повторить на Debian.
+- [x] Проверить права volume для UID 10001, запуск read-only контейнера и передачу настроек из `.env`.
 - [x] Проверить Compose и контейнеры: web + одноразовый migrate/check, ограничения памяти/CPU/PID, ротация логов.
 - [ ] Протестировать systemd timer на Debian 13, ручной запуск, reboot, Persistent=true.
 - [ ] Проверить timeout: контейнер check не остаётся висеть; следующий запуск возможен.
@@ -96,7 +96,7 @@
 - [x] CI: format, vet, unit/integration tests, сборка обоих Linux-таргетов, Compose validation.
 - [x] На pull request проверять сборку образа без публикации.
 - [ ] По тегу v0.1.0 опубликовать образ в GHCR, закрепив версии/commit SHA действий CI.
-- [ ] Проверить публичное скачивание образа и установку по release Compose.
+- [ ] Проверить сборку на VPS из release-архива и альтернативное публичное скачивание образа.
 - [ ] Выпустить release notes, контрольные суммы deploy-архива и инструкции миграции.
 - [ ] Убрать статус «проектирование» только после фактического прохождения критериев.
 
