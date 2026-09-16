@@ -22,7 +22,27 @@ type PSPConfig struct {
 
 func New(client *Client) *Extractor { return &Extractor{client: client} }
 
+func ApplyKnownProfile(w model.Watch) model.Watch {
+	if w.Kind != model.KindHTML || w.Selector != "" {
+		return w
+	}
+	u, err := url.Parse(w.URL)
+	if err != nil {
+		return w
+	}
+	if strings.EqualFold(u.Hostname(), "gpc.ge") || strings.EqualFold(u.Hostname(), "www.gpc.ge") {
+		w.Selector = `meta[name="product:price:amount"]`
+		w.Attribute = "content"
+		w.ValueType = model.ValuePrice
+		if w.Currency == "" {
+			w.Currency = "GEL"
+		}
+	}
+	return w
+}
+
 func (e *Extractor) Observe(ctx context.Context, w model.Watch) (model.Observation, error) {
+	w = ApplyKnownProfile(w)
 	switch w.Kind {
 	case model.KindHTML:
 		return e.html(ctx, w)
@@ -56,7 +76,24 @@ func (e *Extractor) html(ctx context.Context, w model.Watch) (model.Observation,
 	} else {
 		raw = selection.Text()
 	}
-	return Normalize(raw, w.ValueType, w.Currency)
+	currency := w.Currency
+	if w.ValueType == model.ValuePrice && currency == "" {
+		currency = documentCurrency(doc)
+	}
+	return Normalize(raw, w.ValueType, currency)
+}
+
+func documentCurrency(doc *goquery.Document) string {
+	selectors := []string{`meta[name="product:price:currency"]`, `meta[property="product:price:currency"]`, `meta[itemprop="priceCurrency"]`}
+	for _, selector := range selectors {
+		if value, ok := doc.Find(selector).First().Attr("content"); ok {
+			value = strings.ToUpper(strings.TrimSpace(value))
+			if len(value) >= 3 && len(value) <= 8 {
+				return value
+			}
+		}
+	}
+	return ""
 }
 
 func (e *Extractor) ResolvePSP(ctx context.Context, rawURL string) (PSPConfig, model.Observation, error) {

@@ -33,3 +33,34 @@ jobs:
         run: docker compose config --quiet
       - name: Build container image
         run: docker build --tag handy-parser:ci .
+      - name: Smoke test container as runtime user
+        shell: bash
+        run: |
+          set -euo pipefail
+          data_dir="$(mktemp -d)"
+          sudo chown 10001:10001 "$data_dir"
+          docker run --rm \
+            --user 10001:10001 \
+            --read-only \
+            --tmpfs /tmp:size=16m,mode=1777 \
+            --volume "$data_dir:/data" \
+            --env HANDY_DB_PATH=/data/handy.db \
+            handy-parser:ci migrate
+          docker run --detach --name handy-parser-ci \
+            --user 10001:10001 \
+            --read-only \
+            --tmpfs /tmp:size=16m,mode=1777 \
+            --volume "$data_dir:/data" \
+            --memory 96m --memory-swap 96m --cpus 0.50 --pids-limit 64 \
+            --env HANDY_DB_PATH=/data/handy.db \
+            --env HANDY_LISTEN=0.0.0.0:8080 \
+            --env HANDY_ADMIN_PASSWORD=ci-only-password \
+            handy-parser:ci serve
+          trap 'docker logs handy-parser-ci; docker rm --force handy-parser-ci' EXIT
+          for attempt in {1..10}; do
+            if docker exec handy-parser-ci /app/handy-parser healthcheck; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1

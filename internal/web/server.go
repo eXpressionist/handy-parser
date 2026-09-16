@@ -240,8 +240,13 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "database error", http.StatusInternalServerError)
 		return
 	}
+	failed, err := s.store.FailedOutboxCount(r.Context())
+	if err != nil {
+		http.Error(w, "database error", http.StatusInternalServerError)
+		return
+	}
 	sess, _ := r.Context().Value(sessionKey).(session)
-	s.render(w, pageData{CSRF: sess.csrf, Watches: watches, Changes: changes, LastRun: lastRun, PendingOutbox: pending, Message: r.URL.Query().Get("msg"), TelegramConfigured: s.telegram.Configured()})
+	s.render(w, pageData{CSRF: sess.csrf, Watches: watches, Changes: changes, LastRun: lastRun, PendingOutbox: pending, FailedOutbox: failed, Message: r.URL.Query().Get("msg"), TelegramConfigured: s.telegram.Configured()})
 }
 
 func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
@@ -334,14 +339,12 @@ func (s *Server) formWatch(r *http.Request) (model.Watch, model.Observation, str
 	if w.Kind != model.KindHTML {
 		return w, model.Observation{}, "", fmt.Errorf("неизвестный метод")
 	}
+	w = extract.ApplyKnownProfile(w)
 	if w.Selector == "" {
 		return w, model.Observation{}, "", fmt.Errorf("CSS-селектор обязателен")
 	}
 	if w.ValueType != model.ValueText {
 		w.ValueType = model.ValuePrice
-	}
-	if w.ValueType == model.ValuePrice && w.Currency == "" {
-		w.Currency = "GEL"
 	}
 	if w.Rule == model.RuleBelow {
 		if err := setThreshold(&w, r.FormValue("threshold")); err != nil {
@@ -463,4 +466,5 @@ type pageData struct {
 	Observation                              model.Observation
 	LastRun                                  *model.RunRecord
 	PendingOutbox                            int
+	FailedOutbox                             int
 }

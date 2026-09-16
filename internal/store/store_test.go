@@ -50,6 +50,14 @@ func TestRecordSuccessBaselineAndChangeAreAtomic(t *testing.T) {
 	if err != nil || len(outbox) != 1 || outbox[0].Message != "price changed" {
 		t.Fatalf("outbox=%v err=%v", outbox, err)
 	}
+	if err = s.MarkOutboxFailed(ctx, outbox[0].ID, "permanent delivery error"); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := s.PendingOutboxCount(ctx)
+	failed, _ := s.FailedOutboxCount(ctx)
+	if pending != 0 || failed != 1 {
+		t.Fatalf("pending=%d failed=%d", pending, failed)
+	}
 }
 
 func TestRecordSuccessRefreshesAdapterConfig(t *testing.T) {

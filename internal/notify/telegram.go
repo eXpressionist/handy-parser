@@ -15,14 +15,34 @@ import (
 
 var ErrNotConfigured = errors.New("telegram is not configured")
 
+type DeliveryError struct {
+	message     string
+	permanent   bool
+	rateLimited bool
+}
+
+func (e *DeliveryError) Error() string { return e.message }
+
+func IsPermanent(err error) bool {
+	var deliveryErr *DeliveryError
+	return errors.As(err, &deliveryErr) && deliveryErr.permanent
+}
+
+func IsRateLimited(err error) bool {
+	var deliveryErr *DeliveryError
+	return errors.As(err, &deliveryErr) && deliveryErr.rateLimited
+}
+
 type Telegram struct {
-	token  string
-	chatID string
-	client *http.Client
+	token    string
+	chatID   string
+	endpoint string
+	client   *http.Client
 }
 
 func NewTelegram(token, chatID string, timeout time.Duration) *Telegram {
-	return &Telegram{token: strings.TrimSpace(token), chatID: strings.TrimSpace(chatID), client: &http.Client{Timeout: timeout}}
+	token = strings.TrimSpace(token)
+	return &Telegram{token: token, chatID: strings.TrimSpace(chatID), endpoint: "https://api.telegram.org/bot" + token + "/sendMessage", client: &http.Client{Timeout: timeout}}
 }
 
 func (t *Telegram) Configured() bool { return t.token != "" && t.chatID != "" }
@@ -36,8 +56,7 @@ func (t *Telegram) Send(ctx context.Context, message string) (time.Duration, err
 		message = string([]rune(message)[:4090]) + "…"
 	}
 	form := url.Values{"chat_id": {t.chatID}, "text": {message}, "disable_web_page_preview": {"true"}}
-	endpoint := "https://api.telegram.org/bot" + t.token + "/sendMessage"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return time.Minute, fmt.Errorf("create Telegram request")
 	}
@@ -67,5 +86,9 @@ func (t *Telegram) Send(ctx context.Context, message string) (time.Duration, err
 	if description == "" {
 		description = "HTTP " + strconv.Itoa(resp.StatusCode)
 	}
-	return retry, fmt.Errorf("Telegram rejected message: %s", description)
+	return retry, &DeliveryError{
+		message:     "Telegram rejected message: " + description,
+		permanent:   resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusRequestTimeout && resp.StatusCode != http.StatusTooManyRequests,
+		rateLimited: resp.StatusCode == http.StatusTooManyRequests,
+	}
 }

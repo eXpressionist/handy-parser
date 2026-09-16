@@ -22,6 +22,8 @@ type Runner struct {
 	logger    *slog.Logger
 }
 
+const maxOutboxTries = 10
+
 type Observer interface {
 	Observe(context.Context, model.Watch) (model.Observation, error)
 }
@@ -133,11 +135,20 @@ func (r *Runner) deliver(ctx context.Context) error {
 			continue
 		}
 		lastErr = sendErr
+		if notify.IsPermanent(sendErr) || item.Tries+1 >= maxOutboxTries {
+			if err = r.store.MarkOutboxFailed(ctx, item.ID, shortError(sendErr)); err != nil {
+				return err
+			}
+			continue
+		}
 		if retry <= 0 {
 			retry = time.Minute
 		}
 		if err = r.store.MarkOutboxFailure(ctx, item.ID, shortError(sendErr), retry); err != nil {
 			return err
+		}
+		if notify.IsRateLimited(sendErr) {
+			break
 		}
 		if ctx.Err() != nil {
 			break

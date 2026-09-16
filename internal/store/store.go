@@ -401,6 +401,12 @@ func (s *Store) PendingOutboxCount(ctx context.Context) (int, error) {
 	return count, err
 }
 
+func (s *Store) FailedOutboxCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM outbox WHERE status='failed'`).Scan(&count)
+	return count, err
+}
+
 func (s *Store) MarkDelivered(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE outbox SET status='delivered',delivered_at=?,last_error='' WHERE id=?`, now(), id)
 	return err
@@ -408,6 +414,11 @@ func (s *Store) MarkDelivered(ctx context.Context, id int64) error {
 
 func (s *Store) MarkOutboxFailure(ctx context.Context, id int64, message string, retry time.Duration) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE outbox SET tries=tries+1,last_error=?,next_attempt_at=? WHERE id=?`, message, time.Now().UTC().Add(retry).Format(time.RFC3339Nano), id)
+	return err
+}
+
+func (s *Store) MarkOutboxFailed(ctx context.Context, id int64, message string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE outbox SET status='failed',tries=tries+1,last_error=? WHERE id=?`, message, id)
 	return err
 }
 

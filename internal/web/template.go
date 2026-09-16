@@ -10,13 +10,13 @@ const pageTemplate = `{{define "watchForm"}}
       <option value="psp" {{if selected .Form.Kind "psp"}}selected{{end}}>PSP по URL</option>
     </select></div>
     <div class="full"><label>URL</label><input type="url" name="url" required value="{{.Form.URL}}"></div>
-    <div><label>CSS-селектор (для HTML)</label><input name="selector" value="{{.Form.Selector}}" placeholder='meta[name="product:price:amount"]'></div>
+    <div><label>CSS-селектор (для HTML; GPC можно оставить пустым)</label><input name="selector" value="{{.Form.Selector}}" placeholder='meta[name="product:price:amount"]'></div>
     <div><label>Атрибут; пусто = текст</label><input name="attribute" value="{{.Form.Attribute}}" placeholder="content"></div>
     <div><label>Тип значения</label><select name="value_type">
       <option value="price" {{if or (eq .Form.ValueType "") (selected .Form.ValueType "price")}}selected{{end}}>Цена</option>
       <option value="text" {{if selected .Form.ValueType "text"}}selected{{end}}>Текст</option>
     </select></div>
-    <div><label>Валюта</label><input name="currency" value="{{if .Form.Currency}}{{.Form.Currency}}{{else}}GEL{{end}}"></div>
+    <div><label>Валюта (пусто = определить из HTML)</label><input name="currency" value="{{.Form.Currency}}" placeholder="GEL"></div>
     <div><label>Правило</label><select name="rule">
       <option value="any_change" {{if or (eq .Form.Rule "") (selected .Form.Rule "any_change")}}selected{{end}}>Любое изменение</option>
       <option value="decrease" {{if selected .Form.Rule "decrease"}}selected{{end}}>Только снижение</option>
@@ -43,7 +43,7 @@ const pageTemplate = `{{define "watchForm"}}
   {{else if .Edit}}
     <div class="card"><h2>Редактировать наблюдение</h2>{{template "watchForm" .}}</div>
   {{else}}
-    <div class="card"><h2>Управление</h2><div class="actions"><form method="post" action="/check"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Проверить всё</button></form>{{if .TelegramConfigured}}<form method="post" action="/telegram/test"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="muted">Тест Telegram</button></form>{{end}}</div>{{if .LastRun}}<p class="status">Последний запуск: {{timevalue .LastRun.StartedAt}}, статус {{.LastRun.Status}}, проверено {{.LastRun.Checked}}, изменений {{.LastRun.Changed}}, ошибок {{.LastRun.Errors}}.</p>{{end}}{{if .PendingOutbox}}<p class="error">Ожидают отправки в Telegram: {{.PendingOutbox}}</p>{{end}}</div>
+    <div class="card"><h2>Управление</h2><div class="actions"><form method="post" action="/check"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Проверить всё</button></form>{{if .TelegramConfigured}}<form method="post" action="/telegram/test"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="muted">Тест Telegram</button></form>{{end}}</div>{{if .LastRun}}<p class="status">Последний запуск: {{timevalue .LastRun.StartedAt}}, статус {{.LastRun.Status}}, проверено {{.LastRun.Checked}}, изменений {{.LastRun.Changed}}, ошибок {{.LastRun.Errors}}.</p>{{end}}{{if .PendingOutbox}}<p class="error">Ожидают отправки в Telegram: {{.PendingOutbox}}</p>{{end}}{{if .FailedOutbox}}<p class="error">Не удалось доставить окончательно: {{.FailedOutbox}}. Проверьте настройки Telegram.</p>{{end}}</div>
     <div class="card"><h2>Наблюдения</h2>{{if .Watches}}<table><thead><tr><th>Название</th><th>Значение</th><th>Состояние</th><th>Действия</th></tr></thead><tbody>{{range .Watches}}<tr><td><strong>{{.Name}}</strong><br><code>{{.Kind}}</code></td><td>{{if .LastDisplay}}{{.LastDisplay}}{{else}}—{{end}}<br><span class="status">успешно: {{timefmt .LastSuccessAt}}</span></td><td>{{if .Enabled}}<span class="ok">активно</span>{{else}}пауза{{end}}{{if .LastError}}<br><span class="error">{{.LastError}}</span>{{end}}</td><td><div class="actions"><a class="button" href="/watches/{{.ID}}/edit">Изменить</a><form method="post" action="/watches/{{.ID}}/toggle"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="muted">{{if .Enabled}}Пауза{{else}}Включить{{end}}</button></form><form method="post" action="/watches/{{.ID}}/delete" onsubmit="return confirm('Удалить наблюдение и историю?')"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="danger">Удалить</button></form></div></td></tr>{{end}}</tbody></table>{{else}}<p>Наблюдений пока нет.</p>{{end}}</div>
     <div class="card"><h2>Добавить страницу</h2>{{template "watchForm" .}}</div>
     {{if .Changes}}<div class="card"><h2>Последние изменения</h2><table><thead><tr><th>Время</th><th>Наблюдение</th><th>Изменение</th></tr></thead><tbody>{{range .Changes}}<tr><td>{{timevalue .ObservedAt}}</td><td>{{.WatchName}}</td><td>{{.OldDisplay}} → {{.NewDisplay}}</td></tr>{{end}}</tbody></table></div>{{end}}

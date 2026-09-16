@@ -4,9 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/eXpressionist/handy-parser/internal/model"
 )
 
@@ -23,6 +25,20 @@ func TestHTMLAttributeExtraction(t *testing.T) {
 	}
 	if obs.Normalized != "13795" {
 		t.Fatalf("got %s", obs.Normalized)
+	}
+}
+
+func TestKnownGPCProfileAndCurrencyExtraction(t *testing.T) {
+	profiled := ApplyKnownProfile(model.Watch{URL: "https://gpc.ge/en/details/product", Kind: model.KindHTML})
+	if profiled.Selector != `meta[name="product:price:amount"]` || profiled.Attribute != "content" || profiled.Currency != "GEL" {
+		t.Fatalf("unexpected GPC profile: %+v", profiled)
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<meta name="product:price:currency" content="usd">`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := documentCurrency(doc); got != "USD" {
+		t.Fatalf("currency=%q", got)
 	}
 }
 
