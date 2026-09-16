@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+secrets
+data
+backups
+research
+.tools
+bin
+dist
+*.log

@@ -1,0 +1,3 @@
+query urlResolver($url: String!) {
+  urlResolver(url: $url) { id type relative_url }
+}

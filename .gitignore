@@ -1,0 +1,26 @@
+# Runtime data and credentials
+.env
+.env.*
+!.env.example
+secrets/
+data/
+backups/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+
+# Build output and local tooling
+bin/
+dist/
+.tools/
+coverage.out
+*.exe
+.DS_Store
+Thumbs.db
+
+# Downloaded third-party assets are local research only
+/research/*.html
+/research/*-index.js

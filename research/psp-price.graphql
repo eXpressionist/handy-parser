@@ -1,0 +1,13 @@
+query productsByID($id: Int!) {
+  productsByID(id: $id) {
+    name
+    sku
+    stock_status
+    price_range {
+      maximum_price {
+        final_price { value }
+        regular_price { value }
+      }
+    }
+  }
+}
