@@ -1,9 +1,29 @@
 package web
 
 import (
+	"log/slog"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
+
+func TestLoginDoesNotDependOnBrowserOriginHeader(t *testing.T) {
+	server, err := New(nil, nil, nil, nil, "correct-password", "Europe/Moscow", slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	form := url.Values{"password": {"wrong-password"}}
+	r := httptest.NewRequest("POST", "http://parser.example/login", strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Origin", "null")
+	r.Header.Set("Sec-Fetch-Site", "cross-site")
+	w := httptest.NewRecorder()
+	server.Handler().ServeHTTP(w, r)
+	if w.Code != 303 || !strings.HasPrefix(w.Header().Get("Location"), "/login?msg=") {
+		t.Fatalf("status=%d location=%q body=%q", w.Code, w.Header().Get("Location"), w.Body.String())
+	}
+}
 
 func TestSameOriginAcceptsDirectExternalAddress(t *testing.T) {
 	r := httptest.NewRequest("POST", "http://5.181.187.148:8080/login", nil)

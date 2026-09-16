@@ -118,10 +118,6 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	if !sameOrigin(r) {
-		http.Error(w, "invalid origin", http.StatusForbidden)
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
