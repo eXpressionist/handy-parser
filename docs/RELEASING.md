@@ -42,6 +42,8 @@
 - Образ доступен по неизменяемой версии/digest; установка не требует сборки на VPS.
 - README обновлён с фактическим статусом и рабочими командами.
 
+После push тега workflow сначала публикует multi-arch образ, затем создаёт GitHub Release. В deploy-архиве Compose закрепляется за digest собранного образа, рядом публикуется файл SHA-256. Тег создаётся только после приёмки на Debian/VPS; для проверки упаковки без релиза CI использует фиктивную версию `v0.0.0-ci`.
+
 ## Источники
 
 - [GitHub Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).

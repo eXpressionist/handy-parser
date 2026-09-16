@@ -16,6 +16,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.image.outputs.repository }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,8 +40,10 @@ jobs:
           else
             tag="edge"
           fi
+          echo "repository=$image" >> "$GITHUB_OUTPUT"
           echo "tag=$image:$tag" >> "$GITHUB_OUTPUT"
       - name: Build and push
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -50,3 +55,30 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build deploy archive
+        shell: bash
+        run: |
+          bash ./scripts/build-release.sh \
+            "$GITHUB_REF_NAME" \
+            "$RUNNER_TEMP/release" \
+            "${{ needs.publish.outputs.image }}@${{ needs.publish.outputs.digest }}"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "$RUNNER_TEMP/release/handy-parser-$GITHUB_REF_NAME.tar.gz" \
+            "$RUNNER_TEMP/release/handy-parser-$GITHUB_REF_NAME.tar.gz.sha256" \
+            --verify-tag \
+            --generate-notes \
+            --title "Handy Parser $GITHUB_REF_NAME"

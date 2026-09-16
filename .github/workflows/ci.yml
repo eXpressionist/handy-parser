@@ -64,3 +64,15 @@ jobs:
             sleep 1
           done
           exit 1
+      - name: Verify release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          output_dir="$(mktemp -d)"
+          bash ./scripts/build-release.sh v0.0.0-ci "$output_dir" ghcr.io/expressionist/handy-parser:edge
+          (cd "$output_dir" && sha256sum --check handy-parser-v0.0.0-ci.tar.gz.sha256)
+          tar -xzf "$output_dir/handy-parser-v0.0.0-ci.tar.gz" -C "$output_dir"
+          mkdir -p "$output_dir/handy-parser-v0.0.0-ci/secrets"
+          touch "$output_dir/handy-parser-v0.0.0-ci/secrets/admin_password"
+          touch "$output_dir/handy-parser-v0.0.0-ci/secrets/telegram_bot_token"
+          docker compose -f "$output_dir/handy-parser-v0.0.0-ci/compose.yaml" config --quiet
