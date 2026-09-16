@@ -3,7 +3,7 @@ name: handy-parser
 x-common: &common
   build:
     context: .
-  image: ${HANDY_PARSER_IMAGE:-handy-parser:local}
+  image: ${HANDY_PARSER_IMAGE:-ghcr.io/expressionist/handy-parser:edge}
   user: "10001:10001"
   read_only: true
   init: true
