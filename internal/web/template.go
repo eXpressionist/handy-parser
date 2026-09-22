@@ -10,7 +10,7 @@ const pageTemplate = `{{define "watchForm"}}
       <option value="psp" {{if selected .Form.Kind "psp"}}selected{{end}}>PSP по URL</option>
     </select></div>
     <div class="full"><label>URL</label><input type="url" name="url" required value="{{.Form.URL}}"></div>
-    <div><label>CSS-селектор (для HTML; GPC можно оставить пустым)</label><input name="selector" value="{{.Form.Selector}}" placeholder='meta[name="product:price:amount"]'></div>
+    <div><label>CSS-селектор (для HTML; GPC и Pharmadepot можно оставить пустым)</label><input name="selector" value="{{.Form.Selector}}" placeholder='meta[name="product:price:amount"]'></div>
     <div><label>Атрибут; пусто = текст</label><input name="attribute" value="{{.Form.Attribute}}" placeholder="content"></div>
     <div><label>Тип значения</label><select name="value_type">
       <option value="price" {{if or (eq .Form.ValueType "") (selected .Form.ValueType "price")}}selected{{end}}>Цена</option>

@@ -28,10 +28,15 @@ func TestHTMLAttributeExtraction(t *testing.T) {
 	}
 }
 
-func TestKnownGPCProfileAndCurrencyExtraction(t *testing.T) {
-	profiled := ApplyKnownProfile(model.Watch{URL: "https://gpc.ge/en/details/product", Kind: model.KindHTML})
-	if profiled.Selector != `meta[name="product:price:amount"]` || profiled.Attribute != "content" || profiled.Currency != "GEL" {
-		t.Fatalf("unexpected GPC profile: %+v", profiled)
+func TestKnownStorefrontProfilesAndCurrencyExtraction(t *testing.T) {
+	for _, rawURL := range []string{
+		"https://gpc.ge/en/details/product",
+		"https://pharmadepot.ge/en/details/product",
+	} {
+		profiled := ApplyKnownProfile(model.Watch{URL: rawURL, Kind: model.KindHTML})
+		if profiled.Selector != canonicalPriceSelector || profiled.Attribute != "content" || profiled.Currency != "GEL" {
+			t.Fatalf("unexpected profile for %s: %+v", rawURL, profiled)
+		}
 	}
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<meta name="product:price:currency" content="usd">`))
 	if err != nil {
@@ -39,6 +44,27 @@ func TestKnownGPCProfileAndCurrencyExtraction(t *testing.T) {
 	}
 	if got := documentCurrency(doc); got != "USD" {
 		t.Fatalf("currency=%q", got)
+	}
+}
+
+func TestKnownStorefrontRecoversFromAmbiguousPriceSelector(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`
+		<meta name="product:price:amount" content="91.33">
+		<div class="price">91.33</div>
+		<div class="price old">140.50</div>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, attribute := selectionForWatch(doc, model.Watch{
+		URL:       "https://pharmadepot.ge/en/details/product",
+		Selector:  ".price",
+		ValueType: model.ValuePrice,
+	})
+	if selection.Length() != 1 || attribute != "content" {
+		t.Fatalf("selection length=%d attribute=%q", selection.Length(), attribute)
+	}
+	if value, ok := selection.Attr(attribute); !ok || value != "91.33" {
+		t.Fatalf("canonical price=%q present=%v", value, ok)
 	}
 }
 

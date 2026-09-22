@@ -22,16 +22,14 @@ type PSPConfig struct {
 
 func New(client *Client) *Extractor { return &Extractor{client: client} }
 
+const canonicalPriceSelector = `meta[name="product:price:amount"]`
+
 func ApplyKnownProfile(w model.Watch) model.Watch {
 	if w.Kind != model.KindHTML || w.Selector != "" {
 		return w
 	}
-	u, err := url.Parse(w.URL)
-	if err != nil {
-		return w
-	}
-	if strings.EqualFold(u.Hostname(), "gpc.ge") || strings.EqualFold(u.Hostname(), "www.gpc.ge") {
-		w.Selector = `meta[name="product:price:amount"]`
+	if knownHTMLPriceHost(w.URL) {
+		w.Selector = canonicalPriceSelector
 		w.Attribute = "content"
 		w.ValueType = model.ValuePrice
 		if w.Currency == "" {
@@ -62,16 +60,16 @@ func (e *Extractor) html(ctx context.Context, w model.Watch) (model.Observation,
 	if err != nil {
 		return model.Observation{}, fmt.Errorf("parse HTML: %w", err)
 	}
-	selection := doc.Find(w.Selector)
+	selection, attribute := selectionForWatch(doc, w)
 	if n := selection.Length(); n != 1 {
 		return model.Observation{}, fmt.Errorf("selector matched %d elements; expected 1", n)
 	}
 	raw := ""
-	if w.Attribute != "" {
+	if attribute != "" {
 		var ok bool
-		raw, ok = selection.Attr(w.Attribute)
+		raw, ok = selection.Attr(attribute)
 		if !ok {
-			return model.Observation{}, fmt.Errorf("attribute %q is missing", w.Attribute)
+			return model.Observation{}, fmt.Errorf("attribute %q is missing", attribute)
 		}
 	} else {
 		raw = selection.Text()
@@ -81,6 +79,27 @@ func (e *Extractor) html(ctx context.Context, w model.Watch) (model.Observation,
 		currency = documentCurrency(doc)
 	}
 	return Normalize(raw, w.ValueType, currency)
+}
+
+func selectionForWatch(doc *goquery.Document, w model.Watch) (*goquery.Selection, string) {
+	selection := doc.Find(w.Selector)
+	if selection.Length() == 1 || w.ValueType != model.ValuePrice || !knownHTMLPriceHost(w.URL) {
+		return selection, w.Attribute
+	}
+	canonical := doc.Find(canonicalPriceSelector)
+	if canonical.Length() == 1 {
+		return canonical, "content"
+	}
+	return selection, w.Attribute
+}
+
+func knownHTMLPriceHost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "gpc.ge" || host == "www.gpc.ge" || host == "pharmadepot.ge" || host == "www.pharmadepot.ge"
 }
 
 func documentCurrency(doc *goquery.Document) string {

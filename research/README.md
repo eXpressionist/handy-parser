@@ -11,6 +11,16 @@
 - Для HTTP-парсера предпочтителен селектор `meta[name="product:price:amount"]`, атрибут `content`. Валюта: `meta[name="product:price:currency"]`, атрибут `content`.
 - Альтернатива: `[itemprop="price"]`, атрибут `content`, с проверкой единственности результата. В исходном HTML Next.js часть содержимого передаётся в скрытых контейнерах для последующей вставки; длинный селектор по родительским узлам может различаться до и после JavaScript.
 
+## Pharmadepot
+
+Проверено 2026-09-22.
+
+- URL: https://pharmadepot.ge/en/details/sun-care/sun-care-face/la-roche-posay-anthelios-sp50-sensitive-skin-milk-250ml-1123?product=116736
+- Обычный HTTP GET с заголовками Handy Parser: HTTP 200, около 255 КБ тела.
+- При скидке страница содержит действующую цену 91.33 GEL и старую зачёркнутую цену 140.5 GEL. Длинный DOM-селектор может начать находить оба элемента.
+- Метаданные `meta[name="product:price:amount"]` содержат только действующую цену; значение читается из атрибута `content`. Валюта доступна в `meta[name="product:price:currency"]`.
+- Для известных доменов GPC и Pharmadepot неоднозначный пользовательский селектор цены может безопасно перейти на канонические метаданные, только если найден ровно один такой элемент.
+
 ## PSP
 
 - Исходный URL сохранён в psp-resolve-variables.json (путь без домена).
